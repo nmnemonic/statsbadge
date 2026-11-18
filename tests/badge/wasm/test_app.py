@@ -184,9 +184,30 @@ class IdleAdvance(unittest.TestCase):
         one.advance_if_idle(was + 15000)
         self.assertEqual(one.page_index, 2)
 
+    def test_a_page_left_out_of_the_rotation_is_skipped(self):
+        one = built(idle_advance_s=5, advance_every_s=10)
+        one.layout["pages"] = [PAGES[0], {**PAGES[1], "rotate": False}, PAGES[2]]
+        one.advance_if_idle(one._pressed_at + 5000)
+        self.assertEqual(one.current_page()["id"], "three")
+
+    def test_the_only_page_in_the_rotation_stays_put(self):
+        one = built(idle_advance_s=5)
+        one.layout["pages"] = [PAGES[0], {**PAGES[1], "rotate": False}]
+        one.advance_if_idle(one._pressed_at + 6000)
+        self.assertEqual(one.page_index, 0)
+        self.assertEqual(one._advanced_at, 0, "it turned with nowhere to go")
+
+    def test_a_page_left_out_is_still_reached_by_hand_and_paged_off_when_idle(self):
+        one = built(idle_advance_s=5)
+        one.layout["pages"] = [PAGES[0], {**PAGES[1], "rotate": False}, PAGES[2]]
+        one.turn(1)
+        self.assertEqual(one.current_page()["id"], "two")
+        one.advance_if_idle(one._pressed_at + 5000)
+        self.assertEqual(one.current_page()["id"], "three")
+
 
 class LocalActions(unittest.TestCase):
-    """The three the host offers, which the badge answers itself."""
+    """The four the host offers, which the badge answers itself."""
 
     def test_a_page_can_be_turned_with_no_host_at_all(self):
         one = built(buttons={"a": "badge.next", "b": "badge.prev"})
@@ -204,6 +225,35 @@ class LocalActions(unittest.TestCase):
         self.assertIsNone(levels[-1], "the cycle does not come back to the top")
         self.assertTrue(all(level is not None for level in levels[:-1]), levels)
         self.assertTrue(levels[0] > levels[1], levels)
+
+    def test_the_auto_advance_button_stops_and_restarts_paging(self):
+        """Back on, it turns at once and every interval after, not after the idle wait."""
+        one = built(buttons={"c": "badge.auto_advance"}, idle_advance_s=60,
+                    advance_every_s=10)
+        one.press("c")
+        self.assertEqual(one.toast_text, "auto advance off")
+        one.advance_if_idle(one._pressed_at + 600_000)
+        self.assertEqual(one.page_index, 0, "it paged with auto advance off")
+        one.press("c")
+        self.assertEqual(one.toast_text, "auto advance on")
+        self.assertEqual(one.page_index, 1, "it did not turn on the press")
+        was = one._advanced_at
+        one.advance_if_idle(was + 9999)
+        self.assertEqual(one.page_index, 1, "it turned again inside an interval")
+        one.advance_if_idle(was + 10_000)
+        self.assertEqual(one.page_index, 2, "it waited for the idle time")
+
+    def test_the_auto_advance_button_starts_paging_the_host_has_off(self):
+        one = built(buttons={"c": "badge.auto_advance"}, idle_advance_s=0,
+                    advance_every_s=10)
+        one.press("c")
+        self.assertEqual(one.toast_text, "auto advance on")
+        self.assertEqual(one.page_index, 1, "it did not turn on the press")
+        was = one._advanced_at
+        one.advance_if_idle(was + 9999)
+        self.assertEqual(one.page_index, 1, "it turned again inside an interval")
+        one.advance_if_idle(was + 10_000)
+        self.assertEqual(one.page_index, 2)
 
     def test_a_binding_that_is_not_local_is_held_for_the_host(self):
         one = built(buttons={"a": "media_next"})

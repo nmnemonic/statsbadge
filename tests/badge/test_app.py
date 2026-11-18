@@ -131,10 +131,11 @@ def test_idle_paging_is_off_by_default_and_bounded(ui):
     assert ui.bindings.get("advance") == "advance_every_s", ui.bindings
 
 
-def test_the_host_offers_three_actions_the_badge_answers_itself():
-    """The three actions `LocalActions` drives in tests/badge/wasm/test_app.py."""
+def test_the_host_offers_four_actions_the_badge_answers_itself():
+    """The four actions `LocalActions` drives in tests/badge/wasm/test_app.py."""
     actions = dict(layout.LOCAL_ACTIONS)
-    assert set(actions) == {"badge.prev", "badge.next", "badge.brightness"}, actions
+    assert set(actions) == {"badge.prev", "badge.next", "badge.brightness",
+                            "badge.auto_advance"}, actions
     for action in actions:
         assert action.startswith("badge."), action
 

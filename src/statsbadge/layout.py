@@ -86,6 +86,7 @@ LOCAL_ACTIONS = (
     ("badge.prev", "previous page"),
     ("badge.next", "next page"),
     ("badge.brightness", "brightness"),
+    ("badge.auto_advance", "auto advance on/off"),
 )
 
 # A superset of every machine: `prune` drops the pages whose fields the host lacks.
@@ -601,6 +602,9 @@ def _validate_page(page, seen, extra_kinds=(), page_settings_schema=None):
             number = None
         if number is not None and (optional == "min" or number > 0):
             clean[optional] = number
+    # Absent is in: only a page taken out of the idle rotation says so.
+    if "rotate" in page and not page["rotate"]:
+        clean["rotate"] = False
     if page.get("from_extension"):
         clean["from_extension"] = str(page["from_extension"])
     return clean

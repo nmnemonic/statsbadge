@@ -306,6 +306,9 @@ function singular(label) {
 // Without it a reading is scaled by the busiest the host has seen: wrong for a count.
 const MAX_SETTING = { key: "max", label: "Full scale", type: "number", min: 0, step: "any",
                       placeholder: "automatic" }
+// Unticked, the page is left out when the badge pages on by itself; the buttons still reach it.
+const ROTATE_SETTING = { key: "rotate", label: "Include in auto advance", type: "bool",
+                         default: true }
 
 function pageCard(page, index) {
   const shape = shapeFor(page.kind)
@@ -357,6 +360,7 @@ function pageCard(page, index) {
     item.append(el("label", { htmlFor: titleId, textContent: "Title" }), title,
                 slotList(page, shape),
                 ...(shape.scaled ? settingRow(page, MAX_SETTING) : []),
+                ...settingRow(page, ROTATE_SETTING),
                 ...settings.flatMap((setting) => settingRow(page, setting)),
                 el("footer", null, moveButtons(index), addSlot(page, shape)))
   } else {
@@ -364,6 +368,7 @@ function pageCard(page, index) {
     const named = refs.filter(Boolean).map(fieldLabel)
     const extra = settings.map((setting) => page[setting.key]).filter(Boolean)
     if (shape.scaled && page.max) extra.push(`full scale ${page.max}`)
+    if (page.rotate === false) extra.push("not in auto advance")
     item.append(el("p", { textContent: named.concat(extra).join(", ") || "nothing chosen" }))
   }
 

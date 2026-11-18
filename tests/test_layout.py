@@ -489,6 +489,19 @@ def test_every_display_setting_lands_on_a_known_value():
         assert stored(**{key: 10**6})[key] == high, key
 
 
+def test_a_page_can_be_left_out_of_the_idle_rotation():
+    """Only `rotate: false` is stored; absent means the page is in."""
+    def page(**extra):
+        return {"id": "host", "kind": "text", "fields": ["sys.host"], **extra}
+
+    stored = layout.validate({**layout.DEFAULT_CONFIG,
+                              "pages": [page(rotate=False), {**page(rotate=True), "id": "b"},
+                                        {**page(), "id": "c"}]})["pages"]
+    assert [p.get("rotate", "absent") for p in stored] == [False, "absent", "absent"]
+    pruned = layout.prune(stored, {"available": {"sys": ["host"]}})
+    assert pruned[0]["rotate"] is False
+
+
 def test_a_setting_that_is_not_a_number_is_refused():
     """Clamping is for a number out of range; one that is not a number is a bad request."""
     for bad in ("abc", None, [1]):

@@ -157,6 +157,9 @@ class App:
         self.ambient = None
         self.dimmed = None
         self.dim_step = 0
+        # None follows the host's idle_advance_s; True or False is the button's choice.
+        # Held in memory like `dimmed`, so a restart goes back to what the host says.
+        self.auto_advance = None
         self._light_at = 0
         self._swept = 0
         self._pressed_at = time.ticks_ms()
@@ -571,24 +574,22 @@ class App:
         badge.caselights(level)
 
     def buttons(self):
-        touched = False
-        if badge.pressed(BUTTON_UP):
-            self.turn(-1)
-            touched = True
-        if badge.pressed(BUTTON_DOWN):
-            self.turn(1)
-            touched = True
-        for name, button in BINDABLE:
-            if badge.pressed(button):
-                if name == "c" and self.current_page() is None:
-                    self.retry()
-                else:
-                    self.press(name)
-                touched = True
-        if touched:
+        up, down = badge.pressed(BUTTON_UP), badge.pressed(BUTTON_DOWN)
+        named = [name for name, button in BINDABLE if badge.pressed(button)]
+        if up or down or named:
             # Only a press counts: the page turns this class makes for itself must not.
+            # Before the press is acted on, so an action can set these itself.
             self._pressed_at = time.ticks_ms()
             self._advanced_at = 0
+        if up:
+            self.turn(-1)
+        if down:
+            self.turn(1)
+        for name in named:
+            if name == "c" and self.current_page() is None:
+                self.retry()
+            else:
+                self.press(name)
 
     def press(self, which):
         """Return what a button is bound to: something this badge does, or a host command."""
@@ -607,6 +608,24 @@ class App:
             self.turn(1)
         elif action == "badge.brightness":
             self.cycle_brightness()
+        elif action == "badge.auto_advance":
+            self.toggle_auto_advance()
+
+    def toggle_auto_advance(self):
+        """Turn paging on by itself off, or on, whatever the host has it set to.
+
+        Turned on, it pages at once and every interval after, rather than waiting to be
+        left alone.
+        """
+        self.auto_advance = not self.idle_after()
+        if self.auto_advance:
+            now = time.ticks_ms()
+            self._pressed_at = time.ticks_add(now, -self.idle_after() * 1000)
+            self._advanced_at = now
+            step = self.rotation_step()
+            if step:
+                self.turn(step)
+        self.note("auto advance on" if self.auto_advance else "auto advance off")
 
     def cycle_brightness(self):
         """Step the panel down and round again, over the configured level."""
@@ -691,16 +710,45 @@ class App:
 
     def advance_if_idle(self, now):
         """Page on by itself once nothing has been pressed for a while."""
-        after = int(self.setting("idle_advance_s", 0))
-        if not after or len(self.page_list) < 2:
+        after = self.idle_after()
+        if not after:
             return
         if time.ticks_diff(now, self._pressed_at) < after * 1000:
             return
         every = max(1, int(self.setting("advance_every_s", 10)))
         if self._advanced_at and time.ticks_diff(now, self._advanced_at) < every * 1000:
             return
+        step = self.rotation_step()
+        if not step:
+            return
         self._advanced_at = now
-        self.turn(1)
+        self.turn(step)
+
+    def idle_after(self):
+        """Return how many seconds alone before paging on by itself, 0 for never.
+
+        Switched on from the badge while the host has it off, the wait is one interval.
+        """
+        if self.auto_advance is False:
+            return 0
+        after = int(self.setting("idle_advance_s", 0))
+        if after:
+            return after
+        if self.auto_advance:
+            return max(1, int(self.setting("advance_every_s", 10)))
+        return 0
+
+    def rotation_step(self):
+        """Return how far on the next page in the idle rotation is, or 0 for none but this.
+
+        A page with `rotate` false is skipped here and still reached with the buttons.
+        """
+        pages = self.page_list
+        total = len(pages)
+        for step in range(1, total):
+            if pages[(self.page_index + step) % total].get("rotate", True) is not False:
+                return step
+        return 0
 
     def render(self):
         theme = self.theme
